@@ -2,8 +2,8 @@ import pika
 from binance.client import Client
 import pandas as pd
 import json
-from pymongo import MongoClient
-
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 # Загрузка конфигурации
 with open('api_credentials.json', 'r') as config_file:
@@ -14,11 +14,6 @@ api_secret = config['api_secret']
 
 # Соединение с Binance API
 client = Client(api_key, api_secret)
-
-# Настройка MongoDB
-mongo_client = MongoClient("mongodb://localhost:27017/")
-db = mongo_client["binance_data"]
-collection = db["market_data"]
 
 # Соединение с RabbitMQ
 connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
@@ -37,7 +32,8 @@ intervals = {
 }
 
 start_date = '2023-01-01'
-end_date = '2023-01-21'
+end_date = '2024-10-10'
+
 
 # Функция для получения данных с Binance и отправки в RabbitMQ
 def fetch_and_send_data(symbol, interval, start_date, end_date):
@@ -53,13 +49,31 @@ def fetch_and_send_data(symbol, interval, start_date, end_date):
     # Преобразование данных в JSON-формат
     json_data = df.to_dict(orient='records')
 
+    # Создание сообщения с данными и интервалом
+    message = {
+        'data': json_data,
+        'interval': interval  # Добавляем интервал
+    }
+
     # Отправка данных в RabbitMQ
-    channel.basic_publish(exchange='', routing_key='binance_data_queue', body=json.dumps(json_data))
+    channel.basic_publish(exchange='', routing_key='binance_data_queue', body=json.dumps(message))
     print(f"Данные отправлены для интервала {interval}")
 
-# Цикл по всем интервалам для получения данных
-for name, interval in intervals.items():
-    fetch_and_send_data(symbol, interval, start_date, end_date)
+
+# Функция для запуска параллельных запросов
+def fetch_data_parallel():
+    with ThreadPoolExecutor(max_workers=len(intervals)) as executor:
+        futures = []
+        for name, interval in intervals.items():
+            futures.append(executor.submit(fetch_and_send_data, symbol, name, start_date, end_date))
+
+        # Ждем выполнения всех задач
+        for future in futures:
+            future.result()
+
+
+# Запуск параллельного получения данных
+fetch_data_parallel()
 
 # Закрытие соединения с RabbitMQ
 connection.close()

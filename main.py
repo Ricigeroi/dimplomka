@@ -5,10 +5,12 @@ import json
 from pymongo import MongoClient
 
 
-# Вставьте свой API-ключ и Secret
-api_key = 'j8NaMph6CcxI6RFwIVi1wccxiCanB8t4o23MbHrxArQiBIKffCs3k11Zlk8tdicG'
-api_secret = '82lXTTZasrGWlHWO2zMwY8znvJr68DeVPch3pRHyIsVhHR4EHWQYAhOadiVooZZO'
+# Загрузка конфигурации
+with open('api_credentials.json', 'r') as config_file:
+    config = json.load(config_file)
 
+api_key = config['api_key']
+api_secret = config['api_secret']
 
 # Соединение с Binance API
 client = Client(api_key, api_secret)
